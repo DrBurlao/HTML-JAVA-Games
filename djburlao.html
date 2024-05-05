@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>DjBurlao</title>
+    <style>
+        .game-board {
+            position: relative;
+            width: 400px;
+            height: 600px;
+            background-color: #f0f0f0;
+            border: 1px solid #ccc;
+            overflow: hidden;
+        }
+
+        .note {
+            position: absolute;
+            width: 80px;
+            height: 20px;
+            background-color: blue;
+            border: 1px solid #000;
+            text-align: center;
+        }
+
+        .hit-line {
+            position: absolute;
+            width: 100%;
+            height: 5px;
+            background-color: red;
+            bottom: 50px;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 10px;
+        }
+
+        .key {
+            width: 80px;
+            height: 50px;
+            background-color: red;
+            text-align: center;
+            line-height: 50px;
+            font-size: 18px;
+            font-weight: bold;
+            border: 1px solid #000;
+        }
+
+        .key.middle {
+            background-color: blue;
+        }
+    </style>
+</head>
+<body>
+
+<div>
+    <input type="file" id="audioFile" accept="audio/mp3">
+    <button id="startGame">Start Game</button>
+</div>
+
+<div class="game-board" id="gameBoard">
+    <div class="hit-line"></div>
+</div>
+
+<div class="controls">
+    <div class="key" id="key1">s</div>
+    <div class="key middle" id="key2">d</div>
+    <div class="key middle" id="key3">j</div>
+    <div class="key" id="key4">k</div>
+</div>
+
+<script>
+const gameBoard = document.getElementById("gameBoard");
+const audioFileInput = document.getElementById("audioFile");
+const startGameButton = document.getElementById("startGame");
+
+let audioContext;
+let analyzer;
+let source;
+let gameRunning = false;
+let notes = [];
+let animationIntervals = [];
+
+const noteTravelTime = 2;  // Tiempo que toma para que las notas lleguen a la línea de pulsación
+const noteSpeed = 1000 / noteTravelTime;  // Velocidad de caída para llegar a tiempo
+
+startGameButton.addEventListener("click", () => {
+    if (gameRunning) {
+        stopGame();
+    }
+
+    const file = audioFileInput.files[0];
+    if (!file) {
+        alert("Please select an MP3 file.");
+        return;
+    }
+
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const fileReader = new FileReader();
+
+    fileReader.onload = async (event) => {
+        const arrayBuffer = event.target.result;
+        try {
+            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+            source = audioContext.createBufferSource();
+            analyzer = audioContext.createAnalyser();
+
+            source.buffer = audioBuffer;
+            source.connect(analyzer);
+            analyzer.connect(audioContext.destination);
+
+            analyzer.fftSize = 2048;  // FFT size for frequency analysis
+            const bufferLength = analyzer.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+
+            source.start();
+            gameRunning = true;
+
+            // Peak detection to generate notes based on music events
+            const peakDetectionLoop = setInterval(() => {
+                if (!gameRunning) {
+                    clearInterval(peakDetectionLoop);
+                    return;
+                }
+
+                analyzer.getByteFrequencyData(dataArray);
+
+                const currentTime = audioContext.currentTime;
+                const peaks = detectPeaks(dataArray, 180);  // Umbral para detectar picos
+
+                if (peaks.length > 0) {
+                    const lane = Math.floor(Math.random() * 4);  // Random lane
+                    createNote(lane, currentTime);  // Create note with sync timing
+                }
+            }, 135);  // Revisar picos cada 200 ms
+
+            source.onended = () => {
+                stopGame();  // Detener el juego cuando termine el audio
+            };
+
+        } catch (error) {
+            console.error("Error decoding audio data:", error);
+        }
+    };
+
+    fileReader.readAsArrayBuffer(file);
+});
+
+function detectPeaks(dataArray, threshold) {
+    const peaks = [];
+    for (let i = 0; i < dataArray.length; i++) {
+        if (dataArray[i] > threshold) {
+            peaks.push({ index: i, value: dataArray[i] });
+        }
+    }
+    return peaks;
+}
+
+function createNote(lane, creationTime) {
+    const note = document.createElement("div");
+    note.classList.add("note");
+    note.style.left = `${lane * 100}px`;  // Position based on lane
+    note.style.top = `-20px`;  // Start from the top
+
+    gameBoard.appendChild(note);
+    notes.push(note);
+
+    const animationInterval = setInterval(() => {
+        if (!gameRunning) {
+            clearInterval(animationInterval);
+            return;
+        }
+
+        const currentPos = parseInt(note.style.top);
+        const newPos = currentPos + noteSpeed / 60;  // Adjusted speed for sync
+
+        note.style.top = `${newPos}px`;
+
+        if (newPos >= 550) {  // If it reaches the hit line, remove
+            gameBoard.removeChild(note);
+            clearInterval(animationInterval);
+            notes.splice(notes.indexOf(note), 1);
+        }
+    }, 16);  // Approximately 60 FPS
+    animationIntervals.push(animationInterval);  // Store for cleanup
+}
+
+document.addEventListener("keydown", (event) => {
+    if (!gameRunning) return;
+
+    const keyMapping = {
+        's': s,
+        'd': d,
+        'j': j,
+        'k': k
+    };
+
+    const keyIndex = keyMapping[event.key];
+    if (keyIndex !== undefined) {
+        notes.forEach((note, index) => {
+            const notePosition = parseInt(note.style.top);
+            const lane = parseInt(note.style.left) / 100;
+
+            if (notePosition >= 500 && notePosition <= 600 && lane === keyIndex) {
+                gameBoard.removeChild(note);
+                notes.splice(index, 1);
+            }
+        });
+    }
+});
+
+function stopGame() {
+    gameRunning = false;
+    if (source) {
+        source.stop();
+    }
+    animationIntervals.forEach((interval) => {
+        clearInterval(interval);
+    });
+    animationIntervals = [];
+    notes.forEach((note) => {
+        gameBoard.removeChild(note);
+    });
+    notes = [];
+}
+</script>
+
+</body>
+</html>
