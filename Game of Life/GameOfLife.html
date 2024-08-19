@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conway's Game of Life</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #333;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            background-color: #111;
+            border: 1px solid #555;
+            touch-action: none;
+        }
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin-bottom: 10px;
+        }
+        .info {
+            margin-top: 10px;
+            font-size: 16px;
+        }
+        button, select, input[type="color"] {
+            background-color: #555;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 16px;
+        }
+        button:hover, select:hover, input[type="color"]:hover {
+            background-color: #777;
+        }
+        input[type="color"] {
+            padding: 0;
+            width: 40px;
+            height: 40px;
+        }
+        #speedRange {
+            margin: 5px;
+        }
+        @media (max-width: 600px) {
+            canvas {
+                width: 100%;
+                height: auto;
+            }
+            button, select, input[type="color"] {
+                padding: 8px 15px;
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <button onclick="togglePlay()">Play/Pause</button>
+        <button onclick="resetGrid()">Reset</button>
+        <button onclick="clearGrid()">Clear</button>
+        <label for="speedRange">Speed: </label>
+        <input type="range" id="speedRange" min="1" max="20" value="10" oninput="changeSpeed(this.value)">
+        <label for="cellSize">Cell Size: </label>
+        <select id="cellSize" onchange="changeCellSize(this.value)">
+            <option value="5">5</option>
+            <option value="10" selected>10</option>
+            <option value="20">20</option>
+        </select>
+        <label for="colorPicker">Cell Color: </label>
+        <input type="color" id="colorPicker" value="#FFFFFF" onchange="changeCellColor(this.value)">
+        <button onclick="savePattern()">Save Pattern</button>
+        <button onclick="loadPattern()">Load Pattern</button>
+        <button onclick="loadPreset('glider')">Glider</button>
+        <button onclick="loadPreset('pulsar')">Pulsar</button>
+        <button onclick="loadPreset('oscillator')">Oscillator</button>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+    <div class="info">
+        <span id="generationCount">Generation: 0</span>
+        <span id="aliveCount">Alive Cells: 0</span>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        let resolution = 10;
+        let COLS, ROWS;
+        let grid, playing = false, animationId;
+        let speed = 100; // ms per frame
+        let generation = 0;
+        let cellColor = '#FFFFFF';
+        let savedPattern = [];
+        
+        function resizeCanvas() {
+            const maxWidth = window.innerWidth * 0.9;
+            const maxHeight = window.innerHeight * 0.7;
+            canvas.width = maxWidth - (maxWidth % resolution);
+            canvas.height = maxHeight - (maxHeight % resolution);
+            COLS = Math.floor(canvas.width / resolution);
+            ROWS = Math.floor(canvas.height / resolution);
+            grid = buildGrid();
+            drawGrid();
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        function buildGrid() {
+            return new Array(COLS).fill(null)
+                .map(() => new Array(ROWS).fill(null)
+                .map(() => 0));
+        }
+
+        function resetGrid() {
+            grid = buildGrid();
+            generation = 0;
+            updateInfo();
+            drawGrid();
+        }
+
+        function clearGrid() {
+            grid = buildGrid();
+            generation = 0;
+            updateInfo();
+            drawGrid();
+        }
+
+        function drawGrid() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            let aliveCount = 0;
+            for (let col = 0; col < COLS; col++) {
+                for (let row = 0; row < ROWS; row++) {
+                    const cell = grid[col][row];
+                    if (cell) aliveCount++;
+                    ctx.beginPath();
+                    ctx.rect(col * resolution, row * resolution, resolution, resolution);
+                    ctx.fillStyle = cell ? cellColor : 'black';
+                    ctx.fill();
+                    ctx.strokeStyle = '#333';
+                    ctx.stroke();
+                }
+            }
+            document.getElementById('aliveCount').textContent = `Alive Cells: ${aliveCount}`;
+        }
+
+        function updateGrid() {
+            const nextGen = grid.map(arr => [...arr]);
+
+            for (let col = 0; col < grid.length; col++) {
+                for (let row = 0; row < grid[col].length; row++) {
+                    const cell = grid[col][row];
+                    const numNeighbors = countNeighbors(grid, col, row);
+
+                    if (cell === 1 && numNeighbors < 2) {
+                        nextGen[col][row] = 0;
+                    } else if (cell === 1 && numNeighbors > 3) {
+                        nextGen[col][row] = 0;
+                    } else if (cell === 0 && numNeighbors === 3) {
+                        nextGen[col][row] = 1;
+                    }
+                }
+            }
+
+            grid = nextGen;
+            generation++;
+            updateInfo();
+        }
+
+        function countNeighbors(grid, x, y) {
+            const neighbors = [
+                [-1, -1], [-1, 0], [-1, 1],
+                [0, -1],           [0, 1],
+                [1, -1], [1, 0], [1, 1]
+            ];
+
+            return neighbors.reduce((acc, [dx, dy]) => {
+                const x1 = x + dx;
+                const y1 = y + dy;
+                if (x1 >= 0 && x1 < COLS && y1 >= 0 && y1 < ROWS) {
+                    acc += grid[x1][y1];
+                }
+                return acc;
+            }, 0);
+        }
+
+        function animate() {
+            updateGrid();
+            drawGrid();
+            if (playing) {
+                animationId = setTimeout(() => requestAnimationFrame(animate), speed);
+            }
+        }
+
+        function togglePlay() {
+            playing = !playing;
+            if (playing) {
+                animate();
+            } else {
+                clearTimeout(animationId);
+            }
+        }
+
+        function changeSpeed(newSpeed) {
+            speed = 1000 / newSpeed;
+        }
+
+        function changeCellSize(newSize) {
+            resolution = parseInt(newSize, 10);
+            resizeCanvas();
+        }
+
+        function changeCellColor(newColor) {
+            cellColor = newColor;
+            drawGrid();
+        }
+
+        function updateInfo() {
+            document.getElementById('generationCount').textContent = `Generation: ${generation}`;
+        }
+
+        function savePattern() {
+            savedPattern = grid.map(arr => [...arr]);
+            alert("Pattern saved!");
+        }
+
+        function loadPattern() {
+            if (savedPattern.length) {
+                grid = savedPattern.map(arr => [...arr]);
+                drawGrid();
+                alert("Pattern loaded!");
+            } else {
+                alert("No pattern saved!");
+            }
+        }
+
+        function loadPreset(type) {
+            clearGrid();
+            switch(type) {
+                case 'glider':
+                    grid[1][0] = 1;
+                    grid[2][1] = 1;
+                    grid[0][2] = 1;
+                    grid[1][2] = 1;
+                    grid[2][2] = 1;
+                    break;
+                case 'pulsar':
+                    // Pulsar pattern (period 3 oscillator)
+                    let x = Math.floor(COLS / 2) - 6;
+                    let y = Math.floor(ROWS / 2) - 6;
+                    for (let dx of [0, 5, 7, 12]) {
+                        for (let dy of [2, 3, 4, 8, 9, 10]) {
+                            grid[x + dx][y + dy] = 1;
+                            grid[x + dy][y + dx] = 1;
+                        }
+                    }
+                    break;
+                case 'oscillator':
+                    let midX = Math.floor(COLS / 2);
+                    let midY = Math.floor(ROWS / 2);
+                    grid[midX-1][midY] = 1;
+                    grid[midX][midY] = 1;
+                    grid[midX+1][midY] = 1;
+                    break;
+            }
+            drawGrid();
+        }
+
+        canvas.addEventListener('click', (event) => {
+            const col = Math.floor(event.offsetX / resolution);
+            const row = Math.floor(event.offsetY / resolution);
+            grid[col][row] = grid[col][row] ? 0 : 1;
+            drawGrid();
+        });
+
+        canvas.addEventListener('touchmove', (event) => {
+            event.preventDefault();
+            const touch = event.touches[0];
+            const col = Math.floor((touch.clientX - canvas.offsetLeft) / resolution);
+            const row = Math.floor((touch.clientY - canvas.offsetTop) / resolution);
+            if (col >= 0 && col < COLS && row >= 0 && row < ROWS) {
+                grid[col][row] = 1;
+                drawGrid();
+            }
+        });
+
+        resizeCanvas();
+        drawGrid();
+    </script>
+</body>
+</html>
