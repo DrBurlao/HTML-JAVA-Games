@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pantalla de Inicio</title>
+<style>
+    body, html {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        height: 100%;
+    }
+    .splash-screen {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: #000;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+    .splash-screen img {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    .progress-bar-container {
+        position: fixed;
+        bottom: 20px; /* Ajustamos la posición vertical */
+        left: 50%;
+        transform: translateX(-50%);
+        width: 80%;
+        max-width: 400px;
+        height: 10px; /* Aumentamos la altura de la barra de progreso */
+        background-color: #333;
+        border-radius: 5px; /* Borde redondeado */
+        overflow: hidden; /* Ocultar el desbordamiento de la barra */
+    }
+    .progress-bar {
+        height: 100%;
+        background-color: #4CAF50; /* Color de la barra de progreso */
+        animation: fill-progress linear forwards;
+    }
+    @keyframes fill-progress {
+        from {
+            width: 0;
+        }
+        to {
+            width: 100%;
+        }
+    }
+    .progress-text {
+        position: absolute;
+        top: -30px;
+        left: 0;
+        width: 100%;
+        text-align: center;
+        font-size: 14px;
+        color: #fff;
+    }
+</style>
+</head>
+<body>
+<div class="splash-screen">
+    <img src="fondo2.png" alt="Pantalla de Inicio">
+</div>
+
+<div class="progress-bar-container">
+    <div class="progress-bar"></div>
+    <div class="progress-text">Cargando...</div>
+</div>
+
+<audio id="audio" src="index.mp3" autoplay loop></audio>
+
+<script>
+    // Duración de la pantalla de inicio en milisegundos (ej. 5000 = 5 segundos)
+    var duracion = 5000;
+
+    // Redireccionar después de la duración especificada
+    setTimeout(function(){
+        window.location.href = "GameLauncher.html";
+    }, duracion);
+
+    // Actualizar el porcentaje de la barra de progreso
+    var progressBar = document.querySelector('.progress-bar');
+    var progressText = document.querySelector('.progress-text');
+    var porcentaje = 0;
+    var intervalo = setInterval(function() {
+        porcentaje += 1;
+        if (porcentaje >= 100) {
+            clearInterval(intervalo);
+        }
+        progressBar.style.width = porcentaje + '%';
+        progressText.innerText = 'Cargando ' + porcentaje + '%';
+    }, duracion / 100);
+</script>
+</body>
+</html>
