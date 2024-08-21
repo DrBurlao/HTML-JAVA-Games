@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Conway's Game of Life</title>
+    <title>Conway's Game of Life - Enhanced</title>
     <style>
         body {
             display: flex;
@@ -20,6 +20,7 @@
             background-color: #111;
             border: 1px solid #555;
             touch-action: none;
+            cursor: crosshair;
         }
         .controls {
             display: flex;
@@ -68,6 +69,14 @@
         <button onclick="togglePlay()">Play/Pause</button>
         <button onclick="resetGrid()">Reset</button>
         <button onclick="clearGrid()">Clear</button>
+        <button onclick="randomPattern()">Random Pattern</button>
+        <button onclick="selectArea()">Select Area</button>
+        <button onclick="copySelection()">Copy</button>
+        <button onclick="pasteSelection()">Paste</button>
+        <button onclick="placeRandomCells()">Place Random Cells</button>
+        <label for="textInput">Text: </label>
+        <input type="text" id="textInput" placeholder="Type here">
+        <button onclick="textToCells()">Text to Cells</button>
         <label for="speedRange">Speed: </label>
         <input type="range" id="speedRange" min="1" max="20" value="10" oninput="changeSpeed(this.value)">
         <label for="cellSize">Cell Size: </label>
@@ -83,6 +92,9 @@
         <button onclick="loadPreset('glider')">Glider</button>
         <button onclick="loadPreset('pulsar')">Pulsar</button>
         <button onclick="loadPreset('oscillator')">Oscillator</button>
+        <button onclick="loadPreset('gosper')">Gosper Glider Gun</button>
+        <button onclick="loadPreset('spaceship')">Spaceship</button>
+        <button onclick="toggleTheme()">Toggle Night/Day</button>
     </div>
     <canvas id="gameCanvas"></canvas>
     <div class="info">
@@ -100,7 +112,19 @@
         let generation = 0;
         let cellColor = '#FFFFFF';
         let savedPattern = [];
-        
+        let nightMode = true;
+        let selecting = false;
+        let selectionStart = null;
+        let selectionEnd = null;
+        let copiedSelection = null;
+
+        function toggleTheme() {
+            nightMode = !nightMode;
+            document.body.style.backgroundColor = nightMode ? '#333' : '#fff';
+            document.body.style.color = nightMode ? 'white' : 'black';
+            drawGrid();
+        }
+
         function resizeCanvas() {
             const maxWidth = window.innerWidth * 0.9;
             const maxHeight = window.innerHeight * 0.7;
@@ -135,6 +159,15 @@
             drawGrid();
         }
 
+        function randomPattern() {
+            grid = new Array(COLS).fill(null)
+                .map(() => new Array(ROWS).fill(null)
+                .map(() => Math.floor(Math.random() * 2)));
+            generation = 0;
+            updateInfo();
+            drawGrid();
+        }
+
         function drawGrid() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             let aliveCount = 0;
@@ -144,9 +177,9 @@
                     if (cell) aliveCount++;
                     ctx.beginPath();
                     ctx.rect(col * resolution, row * resolution, resolution, resolution);
-                    ctx.fillStyle = cell ? cellColor : 'black';
+                    ctx.fillStyle = cell ? cellColor : nightMode ? 'black' : '#eee';
                     ctx.fill();
-                    ctx.strokeStyle = '#333';
+                    ctx.strokeStyle = nightMode ? '#333' : '#ccc';
                     ctx.stroke();
                 }
             }
@@ -215,7 +248,7 @@
         }
 
         function changeCellSize(newSize) {
-            resolution = parseInt(newSize, 10);
+            resolution = parseInt(newSize);
             resizeCanvas();
         }
 
@@ -224,18 +257,15 @@
             drawGrid();
         }
 
-        function updateInfo() {
-            document.getElementById('generationCount').textContent = `Generation: ${generation}`;
-        }
-
         function savePattern() {
-            savedPattern = grid.map(arr => [...arr]);
+            localStorage.setItem('savedPattern', JSON.stringify(grid));
             alert("Pattern saved!");
         }
 
         function loadPattern() {
-            if (savedPattern.length) {
-                grid = savedPattern.map(arr => [...arr]);
+            const pattern = localStorage.getItem('savedPattern');
+            if (pattern) {
+                grid = JSON.parse(pattern);
                 drawGrid();
                 alert("Pattern loaded!");
             } else {
@@ -254,7 +284,6 @@
                     grid[2][2] = 1;
                     break;
                 case 'pulsar':
-                    // Pulsar pattern (period 3 oscillator)
                     let x = Math.floor(COLS / 2) - 6;
                     let y = Math.floor(ROWS / 2) - 6;
                     for (let dx of [0, 5, 7, 12]) {
@@ -271,6 +300,156 @@
                     grid[midX][midY] = 1;
                     grid[midX+1][midY] = 1;
                     break;
+                case 'gosper':
+                    // Gosper Glider Gun pattern
+                    let gosperX = 1, gosperY = 5;
+                    const gosperPattern = [
+                        [24, 0], [22, 1], [24, 1], [12, 2], [13, 2], [20, 2], [21, 2], [34, 2], [35, 2],
+                        [11, 3], [15, 3], [20, 3], [21, 3], [34, 3], [35, 3], [0, 4], [1, 4], [10, 4], [16, 4],
+                        [20, 4], [21, 4], [0, 5], [1, 5], [10, 5], [14, 5], [16, 5], [17, 5], [22, 5], [24, 5],
+                        [10, 6], [16, 6], [24, 6], [11, 7], [15, 7], [12, 8], [13, 8]
+                    ];
+                    for (let [dx, dy] of gosperPattern) {
+                        grid[gosperX + dx][gosperY + dy] = 1;
+                    }
+                    break;
+                case 'spaceship':
+                    grid[1][0] = 1;
+                    grid[4][0] = 1;
+                    grid[0][1] = 1;
+                    grid[0][2] = 1;
+                    grid[4][2] = 1;
+                    grid[0][3] = 1;
+                    grid[1][3] = 1;
+                    grid[2][3] = 1;
+                    grid[3][3] = 1;
+                    break;
+            }
+            drawGrid();
+        }
+
+        function placeRandomCells() {
+            if (selectionStart && selectionEnd) {
+                for (let col = selectionStart.col; col <= selectionEnd.col; col++) {
+                    for (let row = selectionStart.row; row <= selectionEnd.row; row++) {
+                        grid[col][row] = Math.floor(Math.random() * 2);
+                    }
+                }
+                drawGrid();
+            } else {
+                alert("Please select an area first.");
+            }
+        }
+
+        function selectArea() {
+            selecting = true;
+            alert("Click and drag to select an area.");
+        }
+
+        canvas.addEventListener('mousedown', (event) => {
+            if (selecting) {
+                const col = Math.floor(event.offsetX / resolution);
+                const row = Math.floor(event.offsetY / resolution);
+                selectionStart = { col, row };
+            }
+        });
+
+        canvas.addEventListener('mousemove', (event) => {
+            if (selecting && selectionStart) {
+                const col = Math.floor(event.offsetX / resolution);
+                const row = Math.floor(event.offsetY / resolution);
+                selectionEnd = { col, row };
+                drawGrid();
+                ctx.strokeStyle = 'red';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(
+                    selectionStart.col * resolution,
+                    selectionStart.row * resolution,
+                    (col - selectionStart.col + 1) * resolution,
+                    (row - selectionStart.row + 1) * resolution
+                );
+            }
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            if (selecting) {
+                selecting = false;
+            }
+        });
+
+        function copySelection() {
+            if (selectionStart && selectionEnd) {
+                copiedSelection = [];
+                for (let col = selectionStart.col; col <= selectionEnd.col; col++) {
+                    copiedSelection.push(grid[col].slice(selectionStart.row, selectionEnd.row + 1));
+                }
+                alert("Selection copied!");
+            } else {
+                alert("No area selected.");
+            }
+        }
+
+        function pasteSelection() {
+            if (copiedSelection) {
+                const colOffset = Math.floor((COLS - copiedSelection.length) / 2);
+                const rowOffset = Math.floor((ROWS - copiedSelection[0].length) / 2);
+                for (let col = 0; col < copiedSelection.length; col++) {
+                    for (let row = 0; row < copiedSelection[col].length; row++) {
+                        grid[col + colOffset][row + rowOffset] = copiedSelection[col][row];
+                    }
+                }
+                drawGrid();
+                alert("Selection pasted!");
+            } else {
+                alert("No copied selection to paste.");
+            }
+        }
+
+        function textToCells() {
+            const text = document.getElementById('textInput').value.toUpperCase();
+            if (text.length === 0) {
+                alert("Please enter some text.");
+                return;
+            }
+            clearGrid();
+            const patterns = {
+                A: [
+                    [0, 1, 0],
+                    [1, 0, 1],
+                    [1, 1, 1],
+                    [1, 0, 1],
+                    [1, 0, 1]
+                ],
+                B: [
+                    [1, 1, 0],
+                    [1, 0, 1],
+                    [1, 1, 0],
+                    [1, 0, 1],
+                    [1, 1, 0]
+                ],
+                C: [
+                    [0, 1, 1],
+                    [1, 0, 0],
+                    [1, 0, 0],
+                    [1, 0, 0],
+                    [0, 1, 1]
+                ],
+                // ... (Define more letters)
+                // You can continue adding patterns for other letters, numbers, and symbols.
+            };
+
+            let startCol = Math.floor((COLS - text.length * 4) / 2);
+            let startRow = Math.floor(ROWS / 2) - 2;
+
+            for (let i = 0; i < text.length; i++) {
+                const pattern = patterns[text[i]];
+                if (pattern) {
+                    for (let row = 0; row < pattern.length; row++) {
+                        for (let col = 0; col < pattern[row].length; col++) {
+                            grid[startCol + i * 4 + col][startRow + row] = pattern[row][col];
+                        }
+                    }
+                }
             }
             drawGrid();
         }
@@ -293,8 +472,12 @@
             }
         });
 
-        resizeCanvas();
-        drawGrid();
+        function updateInfo() {
+            document.getElementById('generationCount').textContent = `Generation: ${generation}`;
+        }
+
+        // Initialize with random pattern
+        randomPattern();
     </script>
 </body>
 </html>
